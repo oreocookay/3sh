@@ -3,12 +3,13 @@
 #define SH_RL_BUFSIZE 1024
 
 void sh_loop();
-char *sh_read_line();
-char **sh_split_line();
-void sh_execute();
+void sh_read_line();
+char **sh_split_line(char *);
+void sh_execute(char **);
 
 int main(int argc, char **argv)
 {
+    sh_read_line();
     return EXIT_SUCCESS;
 }
 
@@ -20,9 +21,9 @@ void sh_loop()
 
     do {
         std::cout << "> ";
-        line = sh_read_line();
+        //line = sh_read_line();
         args = sh_split_line(line);
-        status = sh_execute(args);
+        //status = sh_execute(args);
 
         delete line;
         delete args;
@@ -30,7 +31,7 @@ void sh_loop()
     while (status);
 }
 
-char *sh_read_line()
+void sh_read_line()
 {
     int bufsize = SH_RL_BUFSIZE;
     std::vector<char> buf(bufsize);
@@ -39,23 +40,26 @@ char *sh_read_line()
 
     while (true) {
         // read a character
-        cin >> c;
+        std::cin >> c;
 
         // if we hit EOF, replace it with a null character and return
         if (c == EOF || c == '\n') {
-            buf[pos] = '\0';
-            return buf;
+            buf.push_back('\0');
+            //return buf;
+            return;
         }
         else {
-            buf[pos] = c;
+            buf.push_back(c);
         }
+        std::cout << "buf: " << buf[pos] << '\n';
         pos++;
+    }
 }
 
-char **sh_split_line()
+char **sh_split_line(char *c)
 {
 }
 
-void sh_execute()
+void sh_execute(char **c)
 {
 }

@@ -1,19 +1,18 @@
 #include <iostream>
 #include <vector>
-#define SH_RL_BUFSIZE 1024
 
-void sh_loop();
-void sh_read_line();
-void sh_split_line(char *);
-void sh_execute(char **);
+void cmd_loop();
+void read_line();
+void split_line(char *);
+void execute(char **);
 
 int main(int argc, char **argv)
 {
-    sh_read_line();
+    read_line();
     return EXIT_SUCCESS;
 }
 
-void sh_loop()
+void cmd_loop()
 {
     char *line;
     char **args;
@@ -21,9 +20,9 @@ void sh_loop()
 
     do {
         std::cout << "> ";
-        //line = sh_read_line();
-        //args = sh_split_line(line);
-        //status = sh_execute(args);
+        //line = read_line();
+        //args = split_line(line);
+        //status = execute(args);
 
         delete line;
         delete args;
@@ -31,12 +30,12 @@ void sh_loop()
     while (status);
 }
 
-void sh_read_line()
+void read_line()
 {
     std::vector<char> buf;
     std::vector<char> *pbuf = &buf;
 
-    // if we hit EOF, replace it with a null character and return
+    // if we hit EOF or nl, replace it with a null character and return
     int c = std::cin.get();
     while (c != EOF && c != '\n') {
         buf.push_back(c);
@@ -57,10 +56,10 @@ void sh_read_line()
 
 }
 
-void sh_split_line(char *c)
+void split_line(char *c)
 {
 }
 
-void sh_execute(char **c)
+void execute(char **c)
 {
 }

@@ -2,14 +2,14 @@
 #include <vector>
 
 void cmd_loop();
-void read_line();
+std::vector<char> *read_line();
 void split_line(char *);
 void execute(char **);
 
 int main(int argc, char **argv)
 {
     read_line();
-    return EXIT_SUCCESS;
+    return 0;
 }
 
 void cmd_loop()
@@ -30,7 +30,7 @@ void cmd_loop()
     while (status);
 }
 
-void read_line()
+std::vector<char> *read_line()
 {
     std::vector<char> buf;
     std::vector<char> *pbuf = &buf;
@@ -53,7 +53,7 @@ void read_line()
         }
     }
     std::cout << "]\n";
-
+    return pbuf;
 }
 
 void split_line(char *c)

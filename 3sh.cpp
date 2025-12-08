@@ -4,7 +4,7 @@
 
 void sh_loop();
 void sh_read_line();
-char **sh_split_line(char *);
+void sh_split_line(char *);
 void sh_execute(char **);
 
 int main(int argc, char **argv)
@@ -22,7 +22,7 @@ void sh_loop()
     do {
         std::cout << "> ";
         //line = sh_read_line();
-        args = sh_split_line(line);
+        //args = sh_split_line(line);
         //status = sh_execute(args);
 
         delete line;
@@ -33,30 +33,31 @@ void sh_loop()
 
 void sh_read_line()
 {
-    int bufsize = SH_RL_BUFSIZE;
-    std::vector<char> buf(bufsize);
-    int pos = 0;
-    int c;
+    std::vector<char> buf;
+    std::vector<char> *pbuf = &buf;
 
-    while (true) {
-        // read a character
-        std::cin >> c;
-
-        // if we hit EOF, replace it with a null character and return
-        if (c == EOF || c == '\n') {
-            buf.push_back('\0');
-            //return buf;
-            return;
-        }
-        else {
-            buf.push_back(c);
-        }
-        std::cout << "buf: " << buf[pos] << '\n';
-        pos++;
+    // if we hit EOF, replace it with a null character and return
+    int c = std::cin.get();
+    while (c != EOF && c != '\n') {
+        buf.push_back(c);
+        c = std::cin.get();
     }
+    buf.push_back('\0');
+
+    // print contents of buf
+    std::cout << "buf: [";
+    for (int i = 0; i < buf.size(); i++) {
+        int ch = buf[i];
+        std::cout << ch;
+        if (i != buf.size()-1) {
+            std::cout << ", ";
+        }
+    }
+    std::cout << "]\n";
+
 }
 
-char **sh_split_line(char *c)
+void sh_split_line(char *c)
 {
 }
 

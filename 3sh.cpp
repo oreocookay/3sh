@@ -1,14 +1,17 @@
 #include <iostream>
 #include <vector>
+#include <string>
+#include <sstream>
 
 void cmd_loop();
-std::vector<char> *read_line();
-void split_line(char *);
+std::string read_line();
+void split_line(std::string);
 void execute(char **);
 
 int main(int argc, char **argv)
 {
-    read_line();
+    std::string line = read_line();
+    split_line(line);
     return 0;
 }
 
@@ -30,36 +33,29 @@ void cmd_loop()
     while (status);
 }
 
-std::vector<char> *read_line()
+std::string read_line()
 {
-    std::vector<char> buf;
-    std::vector<char> *pbuf = &buf;
-
-    // if we hit EOF or nl, replace it with a null character and return
-    int c = std::cin.get();
-    while (c != EOF && c != '\n') {
-        buf.push_back(c);
-        c = std::cin.get();
-    }
-    buf.push_back('\0');
-
-    // print contents of buf
-    std::cout << "buf: [";
-    for (int i = 0; i < buf.size(); i++) {
-        int ch = buf[i];
-        std::cout << ch;
-        if (i != buf.size()-1) {
-            std::cout << ", ";
-        }
-    }
-    std::cout << "]\n";
-    return pbuf;
+    std::string line;
+    std::getline(std::cin, line);
+    return line;
 }
 
-void split_line(char *c)
+void split_line(std::string line)
 {
+    std::istringstream iss(line);
+    std::string token;
+    std::vector<std::string> tokens;
+
+    while (iss >> token) {
+        tokens.push_back(token);
+    }
+
+    for (auto& t: tokens) {
+        std::cout << t << '\n';
+    }
 }
 
 void execute(char **c)
 {
 }
+

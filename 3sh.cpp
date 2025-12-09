@@ -2,11 +2,13 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include <unistd.h>
 
 void cmd_loop();
 std::string read_line();
-void split_line(std::string);
+std::vector<std::string> split_line(std::string);
 void execute(char **);
+int launch_ps(char **args);
 
 int main(int argc, char **argv)
 {
@@ -40,7 +42,7 @@ std::string read_line()
     return line;
 }
 
-void split_line(std::string line)
+std::vector<std::string> split_line(std::string line)
 {
     std::istringstream iss(line);
     std::string token;
@@ -49,10 +51,34 @@ void split_line(std::string line)
     while (iss >> token) {
         tokens.push_back(token);
     }
+    return tokens;
+}
 
-    for (auto& t: tokens) {
-        std::cout << t << '\n';
+int launch_ps(char **args)
+{
+    pid_t pid, wpid;
+    int status;
+
+    pid = fork();
+    if (pid == 0) {
+        // child process
+        if (execvp(args[0], args) == -1) {
+            std::cerr << "3sh" << '\n';
+        }
+        exit(1);
     }
+    else if (pid < 0) {
+        // error forking
+        std::cerr << "3sh" << '\n';
+    }
+    else {
+        // parent process
+        do {
+            wpid = waitpid(pid, &status, WUNTRACED);
+        }
+        while (!WIFEXITED(status) && !WIFSIGNALED(status));
+    }
+    return 1;
 }
 
 void execute(char **c)

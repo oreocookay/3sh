@@ -1,14 +1,16 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <cstring>
 #include <sstream>
 #include <unistd.h>
 
 void cmd_loop();
 std::string read_line();
 std::vector<std::string> split_line(std::string);
-void execute(char **);
-int launch_ps(char **args);
+int execute(std::vector<std::string> tokens);
+int launch_ps(std::vector<std::string> args);
+
 // prototypes for built-in shell commands
 int cd(char **args);
 int help(char **args);
@@ -16,25 +18,24 @@ int exit(char **args);
 
 int main(int argc, char **argv)
 {
-    std::string line = read_line();
-    split_line(line);
+    cmd_loop();
     return 0;
 }
 
 void cmd_loop()
 {
-    char *line;
-    char **args;
+    std::string line;
+    std::vector<std::string> args;
     int status;
 
     do {
         std::cout << "> ";
-        //line = read_line();
-        //args = split_line(line);
-        //status = execute(args);
+        line = read_line();
+        args = split_line(line);
+        status = execute(args);
 
-        delete line;
-        delete args;
+        //delete line;
+        //delete args;
     }
     while (status);
 }
@@ -58,15 +59,24 @@ std::vector<std::string> split_line(std::string line)
     return tokens;
 }
 
-int launch_ps(char **args)
+int launch_ps(std::vector<std::string> args)
 {
+    // convert vector of strings into vector of char* for execvp
+    std::vector<char*> argv;
+    argv.reserve(args.size() + 1);
+
+    for (const auto& s: args) {
+        argv.push_back(const_cast<char*>(s.c_str()));
+    }
+    argv.push_back(nullptr);
+
     pid_t pid, wpid;
     int status;
 
     pid = fork();
     if (pid == 0) {
         // child process
-        if (execvp(args[0], args) == -1) {
+        if (execvp(argv[0], argv.data()) == -1) {
             std::cerr << "3sh" << '\n';
         }
         exit(1);
@@ -130,7 +140,18 @@ int exit(char **args)
     return 0;
 }
 
-void execute(char **c)
+int execute(std::vector<std::string> tokens)
 {
-}
+    // empty command
+    if (tokens.empty()) {
+        return 1;
+    }
 
+    for (const auto& s: builtin_str) {
+        if (s == tokens[0]) {
+            // run builtin_func for the given command
+        }
+    }
+    
+    return launch_ps(tokens);
+}

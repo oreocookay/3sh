@@ -9,6 +9,10 @@ std::string read_line();
 std::vector<std::string> split_line(std::string);
 void execute(char **);
 int launch_ps(char **args);
+// prototypes for built-in shell commands
+int cd(char **args);
+int help(char **args);
+int exit(char **args);
 
 int main(int argc, char **argv)
 {
@@ -79,6 +83,51 @@ int launch_ps(char **args)
         while (!WIFEXITED(status) && !WIFSIGNALED(status));
     }
     return 1;
+}
+
+std::vector<std::string> builtin_str = {"cd", "help", "exit"};
+
+int (*builtin_func[]) (char **) = {
+    &cd,
+    &help,
+    &exit
+};
+
+int builtins_size()
+{
+    return sizeof(builtin_str) / sizeof(char *);
+}
+
+int cd(char **args)
+{
+    if (args[1] == NULL) {
+        std::cerr << "3sh usage: cd [path]" << '\n';
+    }
+    else {
+        if (chdir(args[1]) != 0) {
+            std::cerr << "lsh" << '\n';
+        }
+    }
+    return 1;
+}
+
+int help(char **args)
+{
+    int i;
+    std::cout << "3sh: lightweight shell " << '\n';
+    std::cout << "usage: [command] [argument(s)] " << '\n';
+    std::cout << "built-in commands:" << '\n';
+
+    for (int i = 0; i < builtins_size(); i++) {
+        std::cout << '\n' << builtin_str[i];
+    }
+
+    return 1;
+}
+
+int exit(char **args)
+{
+    return 0;
 }
 
 void execute(char **c)

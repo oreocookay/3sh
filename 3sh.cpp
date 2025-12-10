@@ -79,7 +79,7 @@ int launch_ps(std::vector<std::string> args)
     if (pid == 0) {
         // child process
         if (execvp(argv[0], argv.data()) == -1) {
-            std::cerr << "3sh: execvp() error" << '\n';
+            std::cerr << "3sh: command not found" << '\n';
         }
         exit(1);
     }
@@ -107,7 +107,7 @@ std::vector<int(*)(std::vector<std::string>&)> builtin_func = {
 int cd(std::vector<std::string>& args)
 {
     if (chdir(args[1].c_str()) != 0) {
-        std::cerr << "3sh: chdir() error" << '\n';
+        std::cerr << "3sh: no such directory" << '\n';
         return -1;
     }
     return 1;
@@ -116,7 +116,7 @@ int cd(std::vector<std::string>& args)
 int help(std::vector<std::string>& args)
 {
     int i;
-    std::cout << "3sh: lightweight shell" << '\n';
+    std::cout << "3sh: lightweight shell, version 0.9" << '\n';
     std::cout << "usage: [command] [argument(s)]" << '\n';
     std::cout << "built-in commands: ";
     for (int i = 0; i < builtins.size() - 1; i++) {

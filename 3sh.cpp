@@ -10,6 +10,7 @@ std::string read_line();
 std::vector<std::string> split_line(std::string line);
 int execute(std::vector<std::string> args);
 int launch_ps(std::vector<std::string> args);
+void sig_handle(int);
 
 // prototypes for built-in shell commands
 int cd(std::vector<std::string>& args);
@@ -17,9 +18,11 @@ int help(std::vector<std::string>& args);
 int exit(std::vector<std::string>& args);
 
 const std::vector<std::string> builtins = {"cd", "help", "exit"};
+bool got_sig = false;
 
 int main(int argc, char **argv)
 {
+    signal(SIGINT, sig_handle);
     cmd_loop();
     return 0;
 }
@@ -31,7 +34,9 @@ void cmd_loop()
     int status;
 
     do {
-        std::cout << "3sh> ";
+        if (!got_sig) {
+            std::cout << "3sh> ";
+        }
         line = read_line();
         args = split_line(line);
         status = execute(args);
@@ -46,6 +51,7 @@ std::string read_line()
 {
     std::string line;
     std::getline(std::cin, line);
+    got_sig = false;
     return line;
 }
 
@@ -145,4 +151,11 @@ int execute(std::vector<std::string> args)
         }
     }
     return launch_ps(args);
+}
+
+void sig_handle(int)
+{
+    // prevent stdout-writing functions from getting choked by signals
+    write(STDOUT_FILENO, "\n3sh> ", 6);
+    got_sig = true;
 }

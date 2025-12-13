@@ -3,6 +3,8 @@
 #include <string>
 #include <sstream>
 #include <unistd.h>
+#include <cerrno>
+
 
 // main function declarations
 void cmd_loop();
@@ -109,7 +111,7 @@ int launch_ps(std::vector<std::string> args)
     return 1;
 }
 
-// table of function pointers to handle builtins
+// vector of function pointers to handle builtins
 std::vector<int(*)(std::vector<std::string>&)> builtin_func = {
     &cd,
     &help,
@@ -118,8 +120,23 @@ std::vector<int(*)(std::vector<std::string>&)> builtin_func = {
 
 int cd(std::vector<std::string>& args)
 {
+    std::string homedir(getenv("HOME"));
+    // return home if "cd"
+    if (args.size() == 1) {
+        args.push_back(homedir);
+    }
+    // replace "~" with $HOME
+    else if (args[1] == "~") {
+        args[1] = homedir;
+    }
+
     if (chdir(args[1].c_str()) != 0) {
-        std::cerr << "3sh: no such directory" << '\n';
+        if (errno == EACCES) {
+            std::cerr << "3sh: permission denied\n";
+        }
+        else {
+            std::cerr << "3sh: no such directory" << '\n';
+        }
         return -1;
     }
     return 1;

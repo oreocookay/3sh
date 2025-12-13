@@ -62,6 +62,15 @@ std::string read_line()
 {
     std::string line;
     std::getline(std::cin, line);
+
+    // expand ~ into homedir
+    for (int i = 0; i < line.size(); i++) {
+        if (line[i] == '~') {
+            line.replace(i, 1, homedir);
+            i += homedir.size() - 1;
+        }
+    }
+
     if (std::cin.eof()) {
         std::cout << '\n';
         std::vector<std::string> _;
@@ -81,6 +90,7 @@ std::vector<std::string> split_line(std::string line)
     while (iss >> arg) {
         args.push_back(arg);
     }
+
     return args;
 }
 
@@ -133,10 +143,6 @@ int cd(std::vector<std::string>& args)
     // return home if "cd"
     if (args.size() == 1) {
         args.push_back(homedir);
-    }
-    // replace "~" with $HOME
-    else if (args[1] == "~") {
-        args[1] = homedir;
     }
 
     if (chdir(args[1].c_str()) != 0) {

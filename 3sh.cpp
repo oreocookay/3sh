@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <cerrno>
 #include <fstream>
+#include <limits.h>
 
 // main function declarations
 void cmd_loop();
@@ -22,10 +23,12 @@ int history_sh(std::vector<std::string>& args);
 int history_append(std::vector<std::string>& args);
 void history_read();
 void history_write();
+std::string get_prompt();
 
 // globals
 const std::vector<std::string> builtins = {"cd", "help", "exit", "history"};
 const std::string homedir(getenv("HOME"));
+char cwd_buf[PATH_MAX];
 std::vector<std::string> history_buf;
 bool got_sigint = false;
 
@@ -45,7 +48,7 @@ void cmd_loop()
 
     do {
         if (!got_sigint) {
-            std::cout << "3sh> ";
+            std::cout << get_prompt();
         }
         line = read_line();
         args = split_line(line);
@@ -254,9 +257,28 @@ void history_write()
     }
 }
 
+std::string get_prompt()
+{
+    getcwd(cwd_buf, sizeof(cwd_buf));
+    std::string cwd(cwd_buf);
+    std::string base;
+    if (cwd == homedir) {
+        return "~ 3sh> ";
+    }
+    if (cwd == "/") {
+        return "/ 3sh> ";
+    }
+    int pos = cwd.find_last_of('/');
+    base = cwd.substr(pos + 1);
+    return base + " 3sh> ";
+}
+
 void sigint_handle(int)
 {
     // prevent stdout-writing functions from getting choked by signals
-    write(STDOUT_FILENO, "\n3sh> ", 6);
+    write(STDOUT_FILENO, "\n", 1);
+    std::string prompt = get_prompt();
+    //write(STDOUT_FILENO, "\n3sh> ", 6);
+    write(STDOUT_FILENO, prompt.data(), prompt.size());
     got_sigint = true;
 }

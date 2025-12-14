@@ -22,9 +22,10 @@ int cd(std::vector<std::string>& args);
 int help(std::vector<std::string>& args);
 int exit_sh(std::vector<std::string>& args);
 int history(std::vector<std::string>& args);
-void sesh_buf_add(const std::vector<std::string>& args);
+void sesh_buf_add(std::string line);
 void read_history_file();
 void write_history_file();
+void expand_special(std::string& line);
 std::string get_prompt();
 
 // globals
@@ -36,7 +37,7 @@ std::vector<std::string> session_buf;
 
 int main(int argc, char **argv)
 {
-    signal(SIGINT, sigint_handle); // listen for ^C and ^D
+    signal(SIGINT, sigint_handle); // listen for ^C
     read_history_file();
     cmd_loop();
     return 0;
@@ -46,14 +47,15 @@ void cmd_loop()
 {
     std::string line;
     std::vector<std::string> args;
-    int status;
+    int status = 1;
 
-    do {
+    while (status) {
         line = read_line();
+        sesh_buf_add(line);
+        expand_special(line);
         args = split_line(line);
         status = execute(args);
     }
-    while (status);
 }
 
 std::string read_line()
@@ -64,22 +66,7 @@ std::string read_line()
         exit_sh(_); // say goodbye
         exit(0);
     }
-
-    std::string line_str(line);
-    sesh_buf_add({line_str});
-
-    if (*line != '\0') {
-        add_history(line);
-    }
-
-    // expand ~ into homedir
-    for (int i = 0; i < line_str.size(); i++) {
-        if (line_str[i] == '~') {
-            line_str.replace(i, 1, homedir);
-            i += homedir.size() - 1;
-        }
-    }
-    return line_str;
+    return std::string(line);
 }
 
 std::vector<std::string> split_line(std::string line)
@@ -93,6 +80,30 @@ std::vector<std::string> split_line(std::string line)
     }
 
     return args;
+}
+
+// vector of function pointers to handle builtins
+std::vector<int(*)(std::vector<std::string>&)> builtin_func = {
+    &cd,
+    &help,
+    &exit_sh,
+    &history
+};
+
+int execute(std::vector<std::string> args)
+{
+    if (args.empty()) {
+        // continue
+        return 1;
+    }
+    // execute builtin command
+    for (int i = 0; i < builtins.size(); i++) {
+        if (args[0] == builtins[i]) {
+            return (*builtin_func[i])(args);
+        }
+    }
+    // execute other command
+    return launch_ps(args);
 }
 
 int launch_ps(std::vector<std::string> args)
@@ -131,13 +142,14 @@ int launch_ps(std::vector<std::string> args)
     return 1;
 }
 
-// vector of function pointers to handle builtins
-std::vector<int(*)(std::vector<std::string>&)> builtin_func = {
-    &cd,
-    &help,
-    &exit_sh,
-    &history
-};
+void sigint_handle(int)
+{
+    // handle ^C; wipe the current line and get a new prompt
+    write(STDOUT_FILENO, "\n", 1);
+    rl_on_new_line();
+    rl_replace_line("", 0);
+    rl_redisplay();
+}
 
 int cd(std::vector<std::string>& args)
 {
@@ -178,22 +190,6 @@ int exit_sh(std::vector<std::string>& args)
     return 0;
 }
 
-int execute(std::vector<std::string> args)
-{
-    if (args.empty()) {
-        // continue
-        return 1;
-    }
-    // execute builtin command
-    for (int i = 0; i < builtins.size(); i++) {
-        if (args[0] == builtins[i]) {
-            return (*builtin_func[i])(args);
-        }
-    }
-    // execute other command
-    return launch_ps(args);
-}
-
 int history(std::vector<std::string>& args) {
     int i = 0;
     for (i = 0; i < history_file_buf.size(); i++) {
@@ -206,17 +202,12 @@ int history(std::vector<std::string>& args) {
     return 1;
 }
 
-void sesh_buf_add(const std::vector<std::string>& args)
+void sesh_buf_add(std::string line)
 {
-    if (!args[0].empty()) {
-        std::string cmd;
-        for (int i = 0; i < args.size() - 1; i++) {
-            cmd += args[i] + ' ';
-        }
-        cmd += args[args.size()-1];
-        session_buf.push_back(cmd);
-    }
-
+    if (!line.empty()) {
+        session_buf.push_back(line);
+        add_history(line.c_str());
+    } 
 }
 
 void read_history_file()
@@ -226,7 +217,7 @@ void read_history_file()
         std::ofstream hist_file(homedir + '/' + ".3sh_history", std::ios::out | std::ios::app);
         if (!hist_file.is_open()) {
             std::cerr << "3sh: could not create history file\n";
-            exit(0);
+            exit(1);
         }
     }
 
@@ -243,7 +234,7 @@ void read_history_file()
     }
     else {
         std::cerr << "3sh: could not read history file\n";
-        exit(0);
+        exit(1);
     }
 }
 
@@ -258,7 +249,18 @@ void write_history_file()
     }
     else {
         std::cerr << "3sh: could not write to history file\n";
-        exit(0);
+        exit(1);
+    }
+}
+
+void expand_special(std::string& line)
+{
+    // expand ~ into homedir
+    for (int i = 0; i < line.size(); i++) {
+        if (line[i] == '~') {
+            line.replace(i, 1, homedir);
+            i += homedir.size() - 1;
+        }
     }
 }
 
@@ -276,13 +278,4 @@ std::string get_prompt()
     int pos = cwd.find_last_of('/');
     base = cwd.substr(pos + 1);
     return base + " 3sh> ";
-}
-
-void sigint_handle(int)
-{
-    // handle ^C; wipe the current line and get a new prompt
-    write(STDOUT_FILENO, "\n", 1);
-    rl_on_new_line();
-    rl_replace_line("", 0);
-    rl_redisplay();
 }

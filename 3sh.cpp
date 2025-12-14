@@ -22,7 +22,7 @@ int cd(std::vector<std::string>& args);
 int help(std::vector<std::string>& args);
 int exit_sh(std::vector<std::string>& args);
 int history(std::vector<std::string>& args);
-int append_to_history(const std::vector<std::string>& args);
+void sesh_buf_add(const std::vector<std::string>& args);
 void read_history_file();
 void write_history_file();
 std::string get_prompt();
@@ -31,7 +31,8 @@ std::string get_prompt();
 const std::vector<std::string> builtins = {"cd", "help", "exit", "history"};
 const std::string homedir(getenv("HOME"));
 char cwd_buf[PATH_MAX];
-std::vector<std::string> history_buf;
+std::vector<std::string> history_file_buf;
+std::vector<std::string> session_buf;
 
 int main(int argc, char **argv)
 {
@@ -65,13 +66,11 @@ std::string read_line()
     }
 
     std::string line_str(line);
-    append_to_history({line_str});
+    sesh_buf_add({line_str});
 
     if (*line != '\0') {
         add_history(line);
     }
-
-    //free(line);
 
     // expand ~ into homedir
     for (int i = 0; i < line_str.size(); i++) {
@@ -196,26 +195,28 @@ int execute(std::vector<std::string> args)
 }
 
 int history(std::vector<std::string>& args) {
-    for (int i = 0; i < history_buf.size(); i++) {
-        std::cout << i+1 << ' ' << history_buf[i] << '\n';
+    int i = 0;
+    for (i = 0; i < history_file_buf.size(); i++) {
+        std::cout << i+1 << ' ' << history_file_buf[i] << '\n';
+    }
+    for (auto& cmd: session_buf) {
+        std::cout << i+1 << ' ' << cmd << '\n';
+        i++;
     }
     return 1;
 }
 
-int append_to_history(const std::vector<std::string>& args)
+void sesh_buf_add(const std::vector<std::string>& args)
 {
-    if (args[0].empty()) {
-        return 1;
+    if (!args[0].empty()) {
+        std::string cmd;
+        for (int i = 0; i < args.size() - 1; i++) {
+            cmd += args[i] + ' ';
+        }
+        cmd += args[args.size()-1];
+        session_buf.push_back(cmd);
     }
 
-    // just joining
-    std::string cmd;
-    for (int i = 0; i < args.size() - 1; i++) {
-        cmd += args[i] + ' ';
-    }
-    cmd += args[args.size()-1];
-    history_buf.push_back(cmd);
-    return 1;
 }
 
 void read_history_file()
@@ -235,7 +236,7 @@ void read_history_file()
     std::ifstream hist_file(homedir + '/' + ".3sh_history");
     if (hist_file.is_open()) {
         while (std::getline(hist_file, line)) {
-            history_buf.push_back(line);
+            history_file_buf.push_back(line);
             add_history(line.c_str());
         }
         hist_file.close();
@@ -250,7 +251,7 @@ void write_history_file()
 {
     std::ofstream hist_file(homedir + '/' + ".3sh_history", std::ios::out | std::ios::app);
     if (hist_file.is_open()) {
-        for (auto& cmd: history_buf) {
+        for (auto& cmd: session_buf) {
             hist_file << cmd << '\n';
         }
         hist_file.close();

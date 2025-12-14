@@ -6,6 +6,8 @@
 #include <cerrno>
 #include <fstream>
 #include <limits.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 // main function declarations
 void cmd_loop();
@@ -19,10 +21,10 @@ void sigint_handle(int);
 int cd(std::vector<std::string>& args);
 int help(std::vector<std::string>& args);
 int exit_sh(std::vector<std::string>& args);
-int history_sh(std::vector<std::string>& args);
-int history_append(std::vector<std::string>& args);
-void history_read();
-void history_write();
+int history(std::vector<std::string>& args);
+int append_to_history(const std::vector<std::string>& args);
+void read_history_file();
+void write_history_file();
 std::string get_prompt();
 
 // globals
@@ -30,12 +32,11 @@ const std::vector<std::string> builtins = {"cd", "help", "exit", "history"};
 const std::string homedir(getenv("HOME"));
 char cwd_buf[PATH_MAX];
 std::vector<std::string> history_buf;
-bool got_sigint = false;
 
 int main(int argc, char **argv)
 {
-    signal(SIGINT, sigint_handle);
-    history_read();
+    signal(SIGINT, sigint_handle); // listen for ^C and ^D
+    read_history_file();
     cmd_loop();
     return 0;
 }
@@ -47,41 +48,39 @@ void cmd_loop()
     int status;
 
     do {
-        if (!got_sigint) {
-            std::cout << get_prompt();
-        }
         line = read_line();
         args = split_line(line);
-        history_append(args);
         status = execute(args);
-
-        //delete line;
-        //delete args;
     }
     while (status);
 }
 
 std::string read_line()
 {
-    std::string line;
-    std::getline(std::cin, line);
-
-    // expand ~ into homedir
-    for (int i = 0; i < line.size(); i++) {
-        if (line[i] == '~') {
-            line.replace(i, 1, homedir);
-            i += homedir.size() - 1;
-        }
-    }
-
-    if (std::cin.eof()) {
-        std::cout << '\n';
+    char *line = readline(get_prompt().c_str());
+    if (line == NULL) { // EOF
         std::vector<std::string> _;
         exit_sh(_); // say goodbye
         exit(0);
     }
-    got_sigint = false;
-    return line;
+
+    std::string line_str(line);
+    append_to_history({line_str});
+
+    if (*line != '\0') {
+        add_history(line);
+    }
+
+    //free(line);
+
+    // expand ~ into homedir
+    for (int i = 0; i < line_str.size(); i++) {
+        if (line_str[i] == '~') {
+            line_str.replace(i, 1, homedir);
+            i += homedir.size() - 1;
+        }
+    }
+    return line_str;
 }
 
 std::vector<std::string> split_line(std::string line)
@@ -138,12 +137,12 @@ std::vector<int(*)(std::vector<std::string>&)> builtin_func = {
     &cd,
     &help,
     &exit_sh,
-    &history_sh
+    &history
 };
 
 int cd(std::vector<std::string>& args)
 {
-    // return home if "cd"
+    // return home
     if (args.size() == 1) {
         args.push_back(homedir);
     }
@@ -155,7 +154,7 @@ int cd(std::vector<std::string>& args)
         else {
             std::cerr << "3sh: no such directory" << '\n';
         }
-        return -1;
+        // return -1;
     }
     return 1;
 }
@@ -176,7 +175,7 @@ int help(std::vector<std::string>& args)
 int exit_sh(std::vector<std::string>& args)
 {
     std::cout << "3sh: <exiting>" << '\n';
-    history_write();
+    write_history_file();
     return 0;
 }
 
@@ -186,27 +185,30 @@ int execute(std::vector<std::string> args)
         // continue
         return 1;
     }
-    // execute builtin
+    // execute builtin command
     for (int i = 0; i < builtins.size(); i++) {
         if (args[0] == builtins[i]) {
             return (*builtin_func[i])(args);
         }
     }
+    // execute other command
     return launch_ps(args);
 }
 
-int history_sh(std::vector<std::string>& args) {
+int history(std::vector<std::string>& args) {
     for (int i = 0; i < history_buf.size(); i++) {
         std::cout << i+1 << ' ' << history_buf[i] << '\n';
     }
     return 1;
 }
 
-int history_append(std::vector<std::string>& args)
+int append_to_history(const std::vector<std::string>& args)
 {
-    if (args.empty()) {
+    if (args[0].empty()) {
         return 1;
     }
+
+    // just joining
     std::string cmd;
     for (int i = 0; i < args.size() - 1; i++) {
         cmd += args[i] + ' ';
@@ -216,7 +218,7 @@ int history_append(std::vector<std::string>& args)
     return 1;
 }
 
-void history_read()
+void read_history_file()
 {
     {
         // create history file if it doesn't exist
@@ -227,12 +229,14 @@ void history_read()
         }
     }
 
-    // simply read the history file and initialize our history buffer
+    // read from the history file and initialize our history buffer
     std::string line;
+
     std::ifstream hist_file(homedir + '/' + ".3sh_history");
     if (hist_file.is_open()) {
         while (std::getline(hist_file, line)) {
             history_buf.push_back(line);
+            add_history(line.c_str());
         }
         hist_file.close();
     }
@@ -242,7 +246,7 @@ void history_read()
     }
 }
 
-void history_write()
+void write_history_file()
 {
     std::ofstream hist_file(homedir + '/' + ".3sh_history", std::ios::out | std::ios::app);
     if (hist_file.is_open()) {
@@ -275,10 +279,9 @@ std::string get_prompt()
 
 void sigint_handle(int)
 {
-    // prevent stdout-writing functions from getting choked by signals
+    // handle ^C; wipe the current line and get a new prompt
     write(STDOUT_FILENO, "\n", 1);
-    std::string prompt = get_prompt();
-    //write(STDOUT_FILENO, "\n3sh> ", 6);
-    write(STDOUT_FILENO, prompt.data(), prompt.size());
-    got_sigint = true;
+    rl_on_new_line();
+    rl_replace_line("", 0);
+    rl_redisplay();
 }

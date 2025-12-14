@@ -5,33 +5,12 @@
 #include <unistd.h>
 #include <cerrno>
 #include <fstream>
-#include <limits.h>
 #include <readline/readline.h>
 #include <readline/history.h>
+#include "3sh.h"
 
-// main function declarations
-void cmd_loop();
-std::string read_line();
-std::vector<std::string> split_line(std::string line);
-int execute(std::vector<std::string> args);
-int launch_ps(std::vector<std::string> args);
-void sigint_handle(int);
-
-// prototypes for built-in shell commands
-int cd(std::vector<std::string>& args);
-int help(std::vector<std::string>& args);
-int exit_sh(std::vector<std::string>& args);
-int history(std::vector<std::string>& args);
-void sesh_buf_add(std::string line);
-void read_history_file();
-void write_history_file();
-void expand_special(std::string& line);
-std::string get_prompt();
-
-// globals
 const std::vector<std::string> builtins = {"cd", "help", "exit", "history"};
-const std::string homedir(getenv("HOME"));
-char cwd_buf[PATH_MAX];
+const std::string homedir = getenv("HOME");
 std::vector<std::string> history_file_buf;
 std::vector<std::string> session_buf;
 
@@ -266,9 +245,9 @@ void expand_special(std::string& line)
 
 std::string get_prompt()
 {
+    char cwd_buf[1024];
     getcwd(cwd_buf, sizeof(cwd_buf));
-    std::string cwd(cwd_buf);
-    std::string base;
+    std::string cwd = cwd_buf;
     if (cwd == homedir) {
         return "~ 3sh> ";
     }
@@ -276,6 +255,6 @@ std::string get_prompt()
         return "/ 3sh> ";
     }
     int pos = cwd.find_last_of('/');
-    base = cwd.substr(pos + 1);
+    std::string base = cwd.substr(pos + 1);
     return base + " 3sh> ";
 }

@@ -11,6 +11,7 @@
 
 const std::vector<std::string> builtins = {"cd", "help", "exit", "history"};
 const std::string homedir = getenv("HOME");
+std::string prevdir;
 std::vector<std::string> history_file_buf;
 std::vector<std::string> session_buf;
 
@@ -132,19 +133,44 @@ void sigint_handle(int)
 
 int cd(std::vector<std::string>& args)
 {
+    char prevdir_buf[1024];
+    char cwd_buf[1024];
+    std::string cwd; 
+
     // return home
     if (args.size() == 1) {
-        args.push_back(homedir);
+        if (prevdir.empty()) {
+            prevdir = getcwd(prevdir_buf, sizeof(prevdir_buf));
+        }
+        chdir(homedir.c_str());
     }
-
-    if (chdir(args[1].c_str()) != 0) {
-        if (errno == EACCES) {
-            std::cerr << "3sh: permission denied\n";
+    // return to previous directory
+    else if (args[1] == "-") {
+        if (prevdir.empty()) {
+            std::cerr << "3sh: previous directory does not yet exist\n";
+            return 1;
+        }
+        cwd = getcwd(cwd_buf, sizeof(cwd_buf));
+        chdir(prevdir.c_str());
+        prevdir = cwd;
+    }
+    
+    // cd into another path
+    else {
+        cwd = getcwd(cwd_buf, sizeof(cwd_buf));
+        // succeed
+        if (chdir(args[1].c_str()) == 0) {
+            prevdir = cwd;
         }
         else {
-            std::cerr << "3sh: no such directory" << '\n';
+            // fail
+            if (errno == EACCES) {
+                std::cerr << "3sh: permission denied\n";
+            }
+            else {
+                std::cerr << "3sh: no such directory" << '\n';
+            }
         }
-        // return -1;
     }
     return 1;
 }

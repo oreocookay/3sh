@@ -3,7 +3,7 @@ void cmd_loop();
 std::string read_line();
 std::vector<std::string> split_line(std::string line);
 int execute(std::vector<std::string> args);
-int launch_ps(std::vector<std::string> args);
+int launch_ps(const std::vector<std::string>& args);
 void sigint_handle(int);
 void sesh_buf_add(std::string line);
 void read_history_file();

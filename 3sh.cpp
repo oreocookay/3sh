@@ -38,6 +38,13 @@ void cmd_loop()
     }
 }
 
+std::vector<int(*)(std::vector<std::string>&)> builtin_func = {
+    &cd,
+    &help,
+    &exit_sh,
+    &history
+};
+
 std::string read_line()
 {
     char *line = readline(get_prompt().c_str());
@@ -62,23 +69,15 @@ std::vector<std::string> split_line(std::string line)
     return args;
 }
 
-// vector of function pointers to handle builtins
-std::vector<int(*)(std::vector<std::string>&)> builtin_func = {
-    &cd,
-    &help,
-    &exit_sh,
-    &history
-};
-
 int execute(std::vector<std::string> args)
 {
     if (args.empty()) {
-        // continue
+        // blank line; continue
         return 1;
     }
     // execute builtin command
     for (int i = 0; i < builtins.size(); i++) {
-        if (args[0] == builtins[i]) {
+        if (builtins[i] == args[0]) {
             return (*builtin_func[i])(args);
         }
     }
@@ -86,38 +85,29 @@ int execute(std::vector<std::string> args)
     return launch_ps(args);
 }
 
-int launch_ps(std::vector<std::string> args)
+int launch_ps(const std::vector<std::string>& args)
 {
-    // convert our command args into a vector of char* for execvp() to handle
+    // create a vector of c-string args to pass to execvp()
     std::vector<char*> argv;
-    argv.reserve(args.size() + 1);
-
-    for (const std::string& s: args) {
-        argv.push_back(const_cast<char*>(s.c_str()));
+    for (const auto& arg: args) {
+        argv.push_back(const_cast<char*>(arg.c_str()));
     }
     argv.push_back(nullptr);
 
-    pid_t pid, wpid;
-    int status;
-
-    pid = fork();
-    if (pid == 0) {
-        // child process
-        if (execvp(argv[0], argv.data()) == -1) {
-            std::cerr << "3sh: command not found" << '\n';
-        }
-        exit(1);
-    }
-    else if (pid < 0) {
-        // error forking
+    pid_t pid = fork();
+    if (pid == -1) {
         std::cerr << "3sh: fork() error" << '\n';
+    }
+    else if (pid == 0) {
+        // child process
+        execvp(argv[0], argv.data());
+        // exec failed
+        std::cerr << "3sh: command not found" << '\n';
+        exit(1);
     }
     else {
         // parent process
-        do {
-            wpid = waitpid(pid, &status, WUNTRACED);
-        }
-        while (!WIFEXITED(status) && !WIFSIGNALED(status));
+        wait(nullptr);
     }
     return 1;
 }
@@ -178,7 +168,7 @@ int cd(std::vector<std::string>& args)
 int help(std::vector<std::string>& args)
 {
     int i;
-    std::cout << "3sh: lightweight shell, version 0.9" << '\n';
+    std::cout << "3sh: lightweight shell ⚡︎version 0.9" << '\n';
     std::cout << "usage: [command] [argument(s)]" << '\n';
     std::cout << "built-in commands: ";
     for (int i = 0; i < builtins.size() - 1; i++) {

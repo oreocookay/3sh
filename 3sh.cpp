@@ -1,14 +1,13 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <sstream>
 #include <unistd.h>
 #include <cerrno>
 #include <fstream>
 #include <fcntl.h>
+#include <sys/wait.h>
 #include <readline/readline.h>
 #include <readline/history.h>
-#include <sys/wait.h>
 #include "3sh.h"
 
 const std::vector<std::string> builtins = {"cd", "help", "exit", "history"};
@@ -32,8 +31,8 @@ void cmd_loop()
     while (status) {
         std::string line = read_line();
         sesh_buf_add(line);
-        expand_special(line);
         ParsedLine pl = parse_line(line);
+        expand_special(pl);
         status = execute(pl);
     }
 }
@@ -78,7 +77,13 @@ Command split_line(const std::string& line)
             }
         }
         else {
-            cur += c;
+            // expand ~ to homedir if not quoted
+            if (!in_quotes && c == '~') {
+                cur += homedir;
+            }
+            else {
+                cur += c;
+            }
         }
     }
     if (in_quotes) {
@@ -425,46 +430,24 @@ void write_history_file()
     }
 }
 
-void expand_special(std::string& line)
+void expand_special(ParsedLine& pl)
 {
-    bool in_quotes = false;
-    // expand ~ into homedir
-    for (int i = 0; i < line.size(); i++) {
-        if (line[i] == '"') {
-            in_quotes = !in_quotes;
-        }
-        if (line[i] == '~' && !in_quotes) {
-            line.replace(i, 1, homedir);
-            i += homedir.size() - 1;
-        }
+    for (auto& cmd: pl.commands) {
+        expand_special(cmd);
     }
+}
 
-    // expand ls into ls --color=auto
-    std::string ls_color = "ls --color=auto";
-    for (int i = 0; i < line.size(); i++) {
-        if (line[i] == '"') {
-            in_quotes = !in_quotes;
-        }
-        if (i != line.size()-1 && line[i] == 'l' && line[i+1] == 's' && !in_quotes) {
-            line.replace(i, 2, ls_color);
-            i += ls_color.size() - 1;
-        }
+void expand_special(Command& cmd)
+{
+    if (cmd.empty()) {
+        // blank line; continue
+        return;
     }
-
-/*
-    // expand ls into ls --color=auto
-    std::string ls_color = "ls --color=auto";
-    auto pos = line.find("ls");
-    if (pos != std::string::npos) {
-        line.replace(pos, 2, ls_color);
+    if (cmd[0] == "ls") {
+        cmd.insert(cmd.begin() + 1, "--color=auto");
     }
-    */
-
-    // expand grep into grep --color=auto
-    std::string grep_color = "grep --color=auto";
-    auto pos = line.find("grep");
-    if (pos != std::string::npos) {
-        line.replace(pos, 4, grep_color);
+    else if (cmd[0] == "grep") {
+        cmd.insert(cmd.begin() + 1, "--color=auto");
     }
 }
 

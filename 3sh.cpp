@@ -77,14 +77,24 @@ ParsedLine parse_line(const std::string& line)
 {
     ParsedLine pl;
 
-    auto pos = line.find('>');
+    auto pos = line.find(">>");
+    if (pos != std::string::npos) {
+        // append found
+        pl.type = LineType::APPEND;
+        Command cmd = split_line(line.substr(0, pos));
+        Command path = split_line(line.substr(pos + 2));
+        pl.commands.push_back(cmd);
+        pl.commands.push_back(path);
+        return pl;
+    }
+    pos = line.find('>');
     if (pos != std::string::npos) {
         // redirection found
         pl.type = LineType::REDIRECT;
-        Command cmd1 = split_line(line.substr(0, pos));
-        Command cmd2 = split_line(line.substr(pos + 1));
-        pl.commands.push_back(cmd1);
-        pl.commands.push_back(cmd2);
+        Command cmd = split_line(line.substr(0, pos));
+        Command path = split_line(line.substr(pos + 1));
+        pl.commands.push_back(cmd);
+        pl.commands.push_back(path);
         return pl;
     }
     pos = line.find('|');
@@ -111,7 +121,10 @@ int execute(const ParsedLine& pl)
         return exec_simple(pl.commands[0]);
     }
     if (pl.type == LineType::REDIRECT) {
-        return exec_redirect(pl.commands);
+        return exec_redirect(pl.commands, false);
+    }
+    if (pl.type == LineType::APPEND) {
+        return exec_redirect(pl.commands, true);
     }
     if (pl.type == LineType::PIPE) {
         return exec_pipe(pl.commands);
@@ -136,7 +149,7 @@ int exec_simple(Command args)
     return launch_ps(args);
 }
 
-int exec_redirect(Pipeline cmds)
+int exec_redirect(Pipeline cmds, bool append)
 {
     Command cmd = cmds[0];
     Command path = cmds[1];
@@ -149,7 +162,9 @@ int exec_redirect(Pipeline cmds)
     pid_t pid = fork();
     if (pid == 0) {
         // child process
-        int fd = open(path[0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        int fd = (append) ? open(path[0].c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644)
+                          : open(path[0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
         if (fd == -1) {
             std::cerr << "3sh: redirect error\n";
             exit(1);

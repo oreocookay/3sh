@@ -5,7 +5,8 @@ typedef std::vector<Command> Pipeline;
 enum LineType {
     SIMPLE,
     PIPE,
-    REDIRECT
+    REDIRECT,
+    APPEND
 };
 
 struct ParsedLine {
@@ -40,7 +41,7 @@ int execute(const ParsedLine& pl);
 
 int exec_simple(Command args);
 
-int exec_redirect(Pipeline cmds);
+int exec_redirect(Pipeline cmds, bool append);
 
 int exec_pipe(Pipeline cmds);
 

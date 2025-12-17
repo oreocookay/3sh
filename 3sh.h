@@ -19,9 +19,7 @@ void cmd_loop();
 
 std::string read_line();
 
-std::vector<std::string> split_line(std::string line);
-
-int launch_ps(const std::vector<std::string>& args);
+std::vector<std::string> split_line(const std::string& line);
 
 void sigint_handle(int);
 

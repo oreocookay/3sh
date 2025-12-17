@@ -427,9 +427,13 @@ void write_history_file()
 
 void expand_special(std::string& line)
 {
+    bool in_quotes = false;
     // expand ~ into homedir
     for (int i = 0; i < line.size(); i++) {
-        if (line[i] == '~') {
+        if (line[i] == '"') {
+            in_quotes = !in_quotes;
+        }
+        if (line[i] == '~' && !in_quotes) {
             line.replace(i, 1, homedir);
             i += homedir.size() - 1;
         }
@@ -437,14 +441,28 @@ void expand_special(std::string& line)
 
     // expand ls into ls --color=auto
     std::string ls_color = "ls --color=auto";
+    for (int i = 0; i < line.size(); i++) {
+        if (line[i] == '"') {
+            in_quotes = !in_quotes;
+        }
+        if (i != line.size()-1 && line[i] == 'l' && line[i+1] == 's' && !in_quotes) {
+            line.replace(i, 2, ls_color);
+            i += ls_color.size() - 1;
+        }
+    }
+
+/*
+    // expand ls into ls --color=auto
+    std::string ls_color = "ls --color=auto";
     auto pos = line.find("ls");
     if (pos != std::string::npos) {
         line.replace(pos, 2, ls_color);
     }
+    */
 
-    // expand grep into ls --color=auto
+    // expand grep into grep --color=auto
     std::string grep_color = "grep --color=auto";
-    pos = line.find("grep");
+    auto pos = line.find("grep");
     if (pos != std::string::npos) {
         line.replace(pos, 4, grep_color);
     }

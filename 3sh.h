@@ -29,7 +29,9 @@ void read_history_file();
 
 void write_history_file();
 
-void expand_special(std::string& line);
+void expand_special(ParsedLine& pl);
+
+void expand_special(Command& cmd);
 
 ParsedLine parse_line(const std::string& line);
 

@@ -7,6 +7,7 @@
 #include <fstream>
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <sys/wait.h>
 #include "3sh.h"
 
 const std::vector<std::string> builtins = {"cd", "help", "exit", "history"};
@@ -25,16 +26,14 @@ int main(int argc, char **argv)
 
 void cmd_loop()
 {
-    std::string line;
-    std::vector<std::string> args;
     int status = 1;
 
     while (status) {
-        line = read_line();
+        std::string line = read_line();
         sesh_buf_add(line);
         expand_special(line);
-        args = split_line(line);
-        status = execute(args);
+        ParsedLine pl = parse_line(line);
+        status = execute(pl);
     }
 }
 
@@ -56,20 +55,71 @@ std::string read_line()
     return std::string(line);
 }
 
-std::vector<std::string> split_line(std::string line)
+Command split_line(std::string line)
 {
-    std::istringstream iss(line);
-    std::string arg;
-    std::vector<std::string> args;
-
-    while (iss >> arg) {
-        args.push_back(arg);
+    if (line.empty()) {
+        // blank line; continue
+        return {};
     }
 
+    // split line by whitespace
+    std::stringstream ss(line);
+    std::string arg;
+    Command args;
+    while (ss >> arg) {
+        args.push_back(arg);
+    }
     return args;
 }
 
-int execute(std::vector<std::string> args)
+ParsedLine parse_line(const std::string& line)
+{
+    ParsedLine pl;
+
+    auto pos = line.find('>');
+    if (pos != std::string::npos) {
+        // redirection found
+        pl.type = LineType::REDIRECT;
+        Command cmd1 = split_line(line.substr(0, pos));
+        Command cmd2 = split_line(line.substr(pos + 1));
+        pl.commands.push_back(cmd1);
+        pl.commands.push_back(cmd2);
+        return pl;
+    }
+    pos = line.find('|');
+    if (pos != std::string::npos) {
+        // pipe found
+        pl.type = LineType::PIPE;
+        Command cmd1 = split_line(line.substr(0, pos));
+        Command cmd2 = split_line(line.substr(pos + 1));
+        pl.commands.push_back(cmd1);
+        pl.commands.push_back(cmd2);
+        return pl;
+    }
+    else {
+        // no pipes or redirections
+        pl.type = LineType::SIMPLE;
+        pl.commands.push_back(split_line(line));
+    }
+    return pl;
+}
+
+int execute(const ParsedLine& pl)
+{
+    if (pl.type == LineType::SIMPLE) {
+        return exec_simple(pl.commands[0]);
+    }
+    if (pl.type == LineType::REDIRECT) {
+        return exec_redirect(pl.commands);
+    }
+    if (pl.type == LineType::PIPE) {
+        return exec_pipe(pl.commands);
+    }
+    std::cerr << "3sh: parsed line type could not be determined\n";
+    return 1;
+}
+
+int exec_simple(Command args)
 {
     if (args.empty()) {
         // blank line; continue
@@ -83,6 +133,75 @@ int execute(std::vector<std::string> args)
     }
     // execute other command
     return launch_ps(args);
+}
+
+int exec_redirect(Pipeline cmds)
+{
+    std::cout << "executing redirect\n";
+    return 1;
+}
+
+int exec_pipe(Pipeline cmds)
+{
+    int fd[2];
+    if (pipe(fd) == -1) {
+        std::cerr << "3sh: pipe() error\n";
+        return 1;
+    }
+
+    pid_t pid1 = fork();
+    
+    if (pid1 == -1) {
+        std::cerr << "3sh: fork() error\n";
+        return 1;
+    }
+    if (pid1 == 0) {
+        // command 1 child process
+        std::vector<char*> argv;
+        for (const auto& arg: cmds[0]) {
+            argv.push_back(const_cast<char*>(arg.c_str()));
+        }
+        argv.push_back(nullptr);
+
+        // connect the write end of the pipe to stdout
+        dup2(fd[1], STDOUT_FILENO);
+        close(fd[0]);
+        close(fd[1]);
+        // execute command 1
+        execvp(argv[0], argv.data());
+        std::cerr << "3sh: exec() error\n";
+    }
+
+    int pid2 = fork();
+    if (pid2 == -1) {
+        std::cerr << "3sh: fork() error\n";
+        return 1;
+    }
+    if (pid2 == 0) {
+        // command 2 child process
+        std::vector<char*> argv;
+        for (const auto& arg: cmds[1]) {
+            argv.push_back(const_cast<char*>(arg.c_str()));
+        }
+        argv.push_back(nullptr);
+
+        // connect the read end of the pipe to stdin
+        dup2(fd[0], STDIN_FILENO);
+        close(fd[0]);
+        close(fd[1]);
+        // execute command 2
+        execvp(argv[0], argv.data());
+        std::cerr << "3sh: exec() error\n";
+    }
+
+    // close the parent process file descriptors
+    close(fd[0]);
+    close(fd[1]);
+
+    // wait for the plumbing
+    waitpid(pid1, nullptr, 0);
+    waitpid(pid2, nullptr, 0);
+    return 1;
 }
 
 int launch_ps(const std::vector<std::string>& args)
@@ -256,6 +375,20 @@ void expand_special(std::string& line)
             line.replace(i, 1, homedir);
             i += homedir.size() - 1;
         }
+    }
+
+    // expand ls into ls --color=auto
+    std::string ls_color = "ls --color=auto";
+    auto pos = line.find("ls");
+    if (pos != std::string::npos) {
+        line.replace(pos, 2, ls_color);
+    }
+
+    // expand grep into ls --color=auto
+    std::string grep_color = "grep --color=auto";
+    pos = line.find("grep");
+    if (pos != std::string::npos) {
+        line.replace(pos, 4, grep_color);
     }
 }
 

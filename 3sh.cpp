@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <cerrno>
 #include <fstream>
+#include <fcntl.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <sys/wait.h>
@@ -137,7 +138,39 @@ int exec_simple(Command args)
 
 int exec_redirect(Pipeline cmds)
 {
-    std::cout << "executing redirect\n";
+    Command cmd = cmds[0];
+    Command path = cmds[1];
+    
+    if (cmd.empty() || path.empty()) {
+        std::cerr << "3sh: redirect error\n";
+        return 1;
+    }
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        // child process
+        int fd = open(path[0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd == -1) {
+            std::cerr << "3sh: redirect error\n";
+            exit(1);
+        }
+        // redirect stdout to file
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+
+        std::vector<char*> argv;
+        for (auto& arg: cmd) {
+            argv.push_back(const_cast<char*>(arg.c_str()));
+        }
+        argv.push_back(nullptr);
+        execvp(argv[0], argv.data());
+        std::cerr << "3sh: exec() error\n";
+        exit(1);
+    }
+    else {
+        // parent process
+        wait(nullptr);
+    }
     return 1;
 }
 

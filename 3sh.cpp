@@ -56,19 +56,37 @@ std::string read_line()
     return std::string(line);
 }
 
-Command split_line(std::string line)
+Command split_line(const std::string& line)
 {
     if (line.empty()) {
         // blank line; continue
         return {};
     }
 
-    // split line by whitespace
-    std::stringstream ss(line);
-    std::string arg;
+    // split line by whitespace and group quoted text as a single argument
     Command args;
-    while (ss >> arg) {
-        args.push_back(arg);
+    std::string cur;
+    bool in_quotes = false;
+    for (char c : line) {
+        if (c == '"') {
+            in_quotes = !in_quotes;
+        }
+        else if (std::isspace(c) && !in_quotes) {
+            if (!cur.empty()) {
+                args.push_back(cur);
+                cur.clear();
+            }
+        }
+        else {
+            cur += c;
+        }
+    }
+    if (in_quotes) {
+        std::cerr << "3sh: unmatched quote found\n";
+        return {};
+    }
+    if (!cur.empty()) {
+        args.push_back(cur);
     }
     return args;
 }
@@ -146,7 +164,27 @@ int exec_simple(Command args)
         }
     }
     // execute other command
-    return launch_ps(args);
+    std::vector<char*> argv;
+    for (const auto& arg: args) {
+        argv.push_back(const_cast<char*>(arg.c_str()));
+    }
+    argv.push_back(nullptr);
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        std::cerr << "3sh: fork() error" << '\n';
+    }
+    else if (pid == 0) {
+        // child process
+        execvp(argv[0], argv.data());
+        std::cerr << "3sh: command not found" << '\n';
+        exit(1);
+    }
+    else {
+        // parent process
+        wait(nullptr);
+    }
+    return 1;
 }
 
 int exec_redirect(Pipeline cmds, bool append)
@@ -252,33 +290,6 @@ int exec_pipe(Pipeline cmds)
     return 1;
 }
 
-int launch_ps(const std::vector<std::string>& args)
-{
-    // create a vector of c-string args to pass to execvp()
-    std::vector<char*> argv;
-    for (const auto& arg: args) {
-        argv.push_back(const_cast<char*>(arg.c_str()));
-    }
-    argv.push_back(nullptr);
-
-    pid_t pid = fork();
-    if (pid == -1) {
-        std::cerr << "3sh: fork() error" << '\n';
-    }
-    else if (pid == 0) {
-        // child process
-        execvp(argv[0], argv.data());
-        // exec failed
-        std::cerr << "3sh: command not found" << '\n';
-        exit(1);
-    }
-    else {
-        // parent process
-        wait(nullptr);
-    }
-    return 1;
-}
-
 void sigint_handle(int)
 {
     // handle ^C; wipe the current line and get a new prompt
@@ -334,7 +345,6 @@ int cd(std::vector<std::string>& args)
 
 int help(std::vector<std::string>& args)
 {
-    int i;
     std::cout << "3sh: lightweight shell ⚡︎version 0.9" << '\n';
     std::cout << "usage: [command] [argument(s)]" << '\n';
     std::cout << "built-in commands: ";

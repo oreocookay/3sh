@@ -6,7 +6,9 @@ enum LineType {
     SIMPLE,
     PIPE,
     REDIRECT,
-    APPEND
+    APPEND,
+    PIPE_REDIRECT,
+    PIPE_APPEND
 };
 
 struct ParsedLine {
@@ -44,6 +46,8 @@ int exec_simple(Command args);
 int exec_redirect(Pipeline cmds, bool append);
 
 int exec_pipe(Pipeline cmds);
+
+int exec_pipe_redirect(Pipeline cmds, bool append);
 
 // built-in shell commands
 int cd(std::vector<std::string>& args);

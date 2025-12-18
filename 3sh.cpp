@@ -15,6 +15,7 @@ const std::string homedir = getenv("HOME");
 std::string prevdir;
 std::vector<std::string> history_file_buf;
 std::vector<std::string> session_buf;
+int last_status = 0;
 
 int main(int argc, char **argv)
 {
@@ -26,14 +27,13 @@ int main(int argc, char **argv)
 
 void cmd_loop()
 {
-    int status = 1;
-
-    while (status) {
+    while (true) {
         std::string line = read_line();
         sesh_buf_add(line);
         ParsedLine pl = parse_line(line);
         expand_special(pl);
-        status = execute(pl);
+        int status = execute(pl);
+        last_status = status;
     }
 }
 
@@ -72,6 +72,10 @@ Command split_line(const std::string& line)
         }
         else if (std::isspace(c) && !in_quotes) {
             if (!cur.empty()) {
+                // expand $? to the last command's return status
+                if (cur == "$?") {
+                    cur = std::to_string(last_status);
+                }
                 args.push_back(cur);
                 cur.clear();
             }
@@ -90,7 +94,11 @@ Command split_line(const std::string& line)
         std::cerr << "3sh: unmatched quote found\n";
         return {};
     }
+    // handle final token
     if (!cur.empty()) {
+        if (cur == "$?") {
+            cur = std::to_string(last_status);
+        }
         args.push_back(cur);
     }
     return args;
@@ -140,27 +148,24 @@ ParsedLine parse_line(const std::string& line)
 
 int execute(const ParsedLine& pl)
 {
-    if (pl.type == LineType::SIMPLE) {
-        return exec_simple(pl.commands[0]);
+    switch (pl.type) {
+        case LineType::SIMPLE:
+            return exec_simple(pl.commands[0]);
+        case LineType::REDIRECT:
+            return exec_redirect(pl.commands, false);
+        case LineType::APPEND:
+            return exec_redirect(pl.commands, true);
+        case LineType::PIPE:
+            return exec_pipe(pl.commands);
     }
-    if (pl.type == LineType::REDIRECT) {
-        return exec_redirect(pl.commands, false);
-    }
-    if (pl.type == LineType::APPEND) {
-        return exec_redirect(pl.commands, true);
-    }
-    if (pl.type == LineType::PIPE) {
-        return exec_pipe(pl.commands);
-    }
-    std::cerr << "3sh: parsed line type could not be determined\n";
-    return 1;
+    return -1;
 }
 
 int exec_simple(Command args)
 {
     if (args.empty()) {
         // blank line; continue
-        return 1;
+        return 0;
     }
     // execute builtin command
     for (int i = 0; i < builtins.size(); i++) {
@@ -178,18 +183,26 @@ int exec_simple(Command args)
     pid_t pid = fork();
     if (pid == -1) {
         std::cerr << "3sh: fork() error" << '\n';
+        return 1;
     }
     else if (pid == 0) {
         // child process
         execvp(argv[0], argv.data());
         std::cerr << "3sh: command not found" << '\n';
-        exit(1);
+        _exit(1);
     }
     else {
         // parent process
-        wait(nullptr);
+        int status;
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status)) {
+            return WEXITSTATUS(status);
+        }
+        if (WIFSIGNALED(status)) {
+            return WTERMSIG(status);
+        }
     }
-    return 1;
+    return -1;
 }
 
 int exec_redirect(Pipeline cmds, bool append)
@@ -199,7 +212,7 @@ int exec_redirect(Pipeline cmds, bool append)
     
     if (cmd.empty() || path.empty()) {
         std::cerr << "3sh: redirect error\n";
-        return 1;
+        return 2;
     }
 
     pid_t pid = fork();
@@ -210,7 +223,7 @@ int exec_redirect(Pipeline cmds, bool append)
 
         if (fd == -1) {
             std::cerr << "3sh: redirect error\n";
-            exit(1);
+            _exit(2);
         }
         // redirect stdout to file
         dup2(fd, STDOUT_FILENO);
@@ -223,13 +236,20 @@ int exec_redirect(Pipeline cmds, bool append)
         argv.push_back(nullptr);
         execvp(argv[0], argv.data());
         std::cerr << "3sh: exec() error\n";
-        exit(1);
+        _exit(3);
     }
     else {
         // parent process
-        wait(nullptr);
+        int status;
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status)) {
+            return WEXITSTATUS(status);
+        }
+        if (WIFSIGNALED(status)) {
+            return WTERMSIG(status);
+        }
     }
-    return 1;
+    return -1;
 }
 
 int exec_pipe(Pipeline cmds)
@@ -237,7 +257,7 @@ int exec_pipe(Pipeline cmds)
     int fd[2];
     if (pipe(fd) == -1) {
         std::cerr << "3sh: pipe() error\n";
-        return 1;
+        return -1;
     }
 
     pid_t pid1 = fork();
@@ -261,6 +281,7 @@ int exec_pipe(Pipeline cmds)
         // execute command 1
         execvp(argv[0], argv.data());
         std::cerr << "3sh: exec() error\n";
+        _exit(4);
     }
 
     int pid2 = fork();
@@ -283,6 +304,7 @@ int exec_pipe(Pipeline cmds)
         // execute command 2
         execvp(argv[0], argv.data());
         std::cerr << "3sh: exec() error\n";
+        _exit(5);
     }
 
     // close the parent process file descriptors
@@ -290,9 +312,15 @@ int exec_pipe(Pipeline cmds)
     close(fd[1]);
 
     // wait for the plumbing
-    waitpid(pid1, nullptr, 0);
-    waitpid(pid2, nullptr, 0);
-    return 1;
+    int status;
+    waitpid(pid2, &status, 0);
+    if (WIFEXITED(status)) {
+        return WEXITSTATUS(status);
+    }
+    if (WIFSIGNALED(status)) {
+        return WTERMSIG(status);
+    }
+    return 0;
 }
 
 void sigint_handle(int)
@@ -304,7 +332,7 @@ void sigint_handle(int)
     rl_redisplay();
 }
 
-int cd(std::vector<std::string>& args)
+int cd(Command& args)
 {
     char prevdir_buf[1024];
     char cwd_buf[1024];
@@ -321,7 +349,7 @@ int cd(std::vector<std::string>& args)
     else if (args[1] == "-") {
         if (prevdir.empty()) {
             std::cerr << "3sh: previous directory does not yet exist\n";
-            return 1;
+            return 3;
         }
         cwd = getcwd(cwd_buf, sizeof(cwd_buf));
         chdir(prevdir.c_str());
@@ -339,13 +367,15 @@ int cd(std::vector<std::string>& args)
             // fail
             if (errno == EACCES) {
                 std::cerr << "3sh: permission denied\n";
+                return 4;
             }
             else {
                 std::cerr << "3sh: no such directory" << '\n';
+                return 5;
             }
         }
     }
-    return 1;
+    return 0;
 }
 
 int help(std::vector<std::string>& args)
@@ -357,14 +387,14 @@ int help(std::vector<std::string>& args)
         std::cout << builtins[i] << ", ";
     }
     std::cout << builtins[builtins.size() - 1] << '\n';
-    return 1;
+    return 0;
 }
 
 int exit_sh(std::vector<std::string>& args)
 {
     std::cout << "3sh: <exiting>" << '\n';
     write_history_file();
-    return 0;
+    std::exit(0);
 }
 
 int history(std::vector<std::string>& args) {
@@ -376,7 +406,7 @@ int history(std::vector<std::string>& args) {
         std::cout << i+1 << ' ' << cmd << '\n';
         i++;
     }
-    return 1;
+    return 0;
 }
 
 void sesh_buf_add(std::string line)

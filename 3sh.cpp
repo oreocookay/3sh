@@ -47,12 +47,15 @@ std::vector<int(*)(const Command&)> builtin_func = {
 std::string read_line()
 {
     char *line = readline(get_prompt().c_str());
-    if (line == NULL) { // EOF
+    if (line == nullptr) { // EOF
         std::vector<std::string> _;
         exit_sh(_); // say goodbye
         exit(0);
     }
-    return std::string(line);
+    // prevent readline memory leak
+    std::string line_str(line);
+    free(line);
+    return line_str;
 }
 
 Command split_line(const std::string& line)

@@ -25,7 +25,7 @@ std::vector<std::string> split_line(const std::string& line);
 
 void sigint_handle(int);
 
-void sesh_buf_add(std::string line);
+void sesh_buf_add(const std::string& line);
 
 void read_history_file();
 
@@ -41,19 +41,19 @@ std::string get_prompt();
 
 int execute(const ParsedLine& pl);
 
-int exec_simple(Command args);
+int exec_simple(const Command& args);
 
-int exec_redirect(Pipeline cmds, bool append);
+int exec_redirect(const Pipeline& cmds, bool append);
 
-int exec_pipe(Pipeline cmds);
+int exec_pipe(const Pipeline& cmds);
 
-int exec_pipe_redirect(Pipeline cmds, bool append);
+int exec_pipe_redirect(const Pipeline& cmds, bool append);
 
 // built-in shell commands
-int cd(std::vector<std::string>& args);
+int cd(const Command& args);
 
-int help(std::vector<std::string>& args);
+int help(const Command& args);
 
-int exit_sh(std::vector<std::string>& args);
+int exit_sh(const Command& args);
 
-int history(std::vector<std::string>& args);
+int history(const Command& args);

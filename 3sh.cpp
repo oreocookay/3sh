@@ -37,7 +37,7 @@ void cmd_loop()
     }
 }
 
-std::vector<int(*)(std::vector<std::string>&)> builtin_func = {
+std::vector<int(*)(const Command&)> builtin_func = {
     &cd,
     &help,
     &exit_sh,
@@ -190,7 +190,7 @@ int execute(const ParsedLine& pl)
     return -1;
 }
 
-int exec_simple(Command args)
+int exec_simple(const Command& args)
 {
     if (args.empty()) {
         // blank line; continue
@@ -234,7 +234,7 @@ int exec_simple(Command args)
     return -1;
 }
 
-int exec_redirect(Pipeline cmds, bool append)
+int exec_redirect(const Pipeline& cmds, bool append)
 {
     Command cmd = cmds[0];
     Command path = cmds[1];
@@ -281,7 +281,7 @@ int exec_redirect(Pipeline cmds, bool append)
     return -1;
 }
 
-int exec_pipe(Pipeline cmds)
+int exec_pipe(const Pipeline& cmds)
 {
     int fd[2];
     if (pipe(fd) == -1) {
@@ -352,7 +352,7 @@ int exec_pipe(Pipeline cmds)
     return 0;
 }
 
-int exec_pipe_redirect(Pipeline cmds, bool append)
+int exec_pipe_redirect(const Pipeline& cmds, bool append)
 {
     int fd[2];
     if (pipe(fd) == -1) {
@@ -426,7 +426,7 @@ void sigint_handle(int)
     rl_redisplay();
 }
 
-int cd(Command& args)
+int cd(const Command& args)
 {
     char prevdir_buf[1024];
     char cwd_buf[1024];
@@ -472,7 +472,7 @@ int cd(Command& args)
     return 0;
 }
 
-int help(std::vector<std::string>& args)
+int help(const Command& args)
 {
     std::cout << "3sh: lightweight shell ⚡︎version 0.9" << '\n';
     std::cout << "usage: [command] [argument(s)]" << '\n';
@@ -484,14 +484,14 @@ int help(std::vector<std::string>& args)
     return 0;
 }
 
-int exit_sh(std::vector<std::string>& args)
+int exit_sh(const Command& args)
 {
     std::cout << "3sh: <exiting>" << '\n';
     write_history_file();
     std::exit(0);
 }
 
-int history(std::vector<std::string>& args) {
+int history(const Command& args) {
     int i = 0;
     for (i = 0; i < history_file_buf.size(); i++) {
         std::cout << i+1 << ' ' << history_file_buf[i] << '\n';
@@ -503,7 +503,7 @@ int history(std::vector<std::string>& args) {
     return 0;
 }
 
-void sesh_buf_add(std::string line)
+void sesh_buf_add(const std::string& line)
 {
     if (!line.empty()) {
         session_buf.push_back(line);

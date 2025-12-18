@@ -108,7 +108,32 @@ ParsedLine parse_line(const std::string& line)
 {
     ParsedLine pl;
 
-    auto pos = line.find(">>");
+    // pipe and append found
+    auto pipe_pos = line.find('|');
+    auto app_pos = line.find(">>");
+    if (pipe_pos != std::string::npos && app_pos != std::string::npos && pipe_pos < app_pos) {
+        pl.type = LineType::PIPE_REDIRECT;
+        Command cmd1 = split_line(line.substr(0, pipe_pos));
+        Command cmd2 = split_line(line.substr(pipe_pos + 1, app_pos - pipe_pos - 1));
+        Command path = split_line(line.substr(app_pos + 2));
+        pl.commands.push_back(cmd1);
+        pl.commands.push_back(cmd2);
+        pl.commands.push_back(path);
+        return pl;
+    }
+    // pipe and redirection found
+    auto pos = line.find('>');
+    if (pipe_pos != std::string::npos && pos != std::string::npos && pipe_pos < pos) {
+        pl.type = LineType::PIPE_REDIRECT;
+        Command cmd1 = split_line(line.substr(0, pipe_pos));
+        Command cmd2 = split_line(line.substr(pipe_pos + 1, pos - pipe_pos -1));
+        Command path = split_line(line.substr(pos + 1));
+        pl.commands.push_back(cmd1);
+        pl.commands.push_back(cmd2);
+        pl.commands.push_back(path);
+        return pl;
+    }
+    pos = line.find(">>");
     if (pos != std::string::npos) {
         // append found
         pl.type = LineType::APPEND;
@@ -157,6 +182,10 @@ int execute(const ParsedLine& pl)
             return exec_redirect(pl.commands, true);
         case LineType::PIPE:
             return exec_pipe(pl.commands);
+        case LineType::PIPE_REDIRECT:
+            return exec_pipe_redirect(pl.commands, false);
+        case LineType::PIPE_APPEND:
+            return exec_pipe_redirect(pl.commands, true);
     }
     return -1;
 }
@@ -320,6 +349,71 @@ int exec_pipe(Pipeline cmds)
     if (WIFSIGNALED(status)) {
         return WTERMSIG(status);
     }
+    return 0;
+}
+
+int exec_pipe_redirect(Pipeline cmds, bool append)
+{
+    int fd[2];
+    if (pipe(fd) == -1) {
+        std::cerr << "3sh: pipe() error\n";
+        return 1;
+    }
+
+    pid_t pid1 = fork();
+    if (pid1 == 0) {
+        // send command 1 output to the pipe
+        dup2(fd[1], STDOUT_FILENO);
+        close(fd[0]);
+        close(fd[1]);
+
+        std::vector<char*> argv;
+        for (auto& arg: cmds[0]) {
+            argv.push_back(const_cast<char*>(arg.c_str()));
+        }
+        argv.push_back(nullptr);
+        // execute command 1
+        execvp(argv[0], argv.data());
+        std::cerr << "3sh: exec() error\n";
+        _exit(6);
+    }
+
+    pid_t pid2 = fork();
+    if (pid2 == -1) {
+        std::cerr << "3sh: fork() error\n";
+        return 1;
+    }
+
+    if (pid2 == 0) {
+        // send command 2 output to the file
+        int outfd = (append) ? open(cmds[2][0].c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644)
+                             : open(cmds[2][0].c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (outfd == -1) {
+            std::cerr << "3sh: redirect error\n";
+            _exit(7);
+        }
+
+        dup2(fd[0], STDIN_FILENO);
+        dup2(outfd, STDOUT_FILENO);
+
+        close(fd[0]);
+        close(fd[1]);
+        close(outfd);
+
+        std::vector<char*> argv;
+        for (auto& arg : cmds[1])
+            argv.push_back(const_cast<char*>(arg.c_str()));
+        argv.push_back(nullptr);
+
+        // execute command 2
+        execvp(argv[0], argv.data());
+        _exit(8);
+    }
+    close(fd[0]);
+    close(fd[1]);
+
+    waitpid(pid1, nullptr, 0);
+    waitpid(pid2, nullptr, 0);
     return 0;
 }
 
